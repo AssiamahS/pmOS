@@ -84,7 +84,7 @@ struct TaskRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title)
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(item.isDone ? .secondary : .white)
+                    .foregroundStyle(item.isDone ? Color.secondary : Color.white)
                     .strikethrough(item.isDone, color: .secondary)
                     .lineLimit(2)
                 HStack(spacing: 8) {
