@@ -3,16 +3,30 @@ import SwiftUI
 struct BoardView: View {
     @EnvironmentObject var store: PMStore
     @State private var showDone = false
+    @State private var note = ""
+    @State private var capturing = false
+    @State private var editing: BoardTask?
 
+    // Buckets with the nearest deadline float to the top; tasks inside a
+    // bucket sort deadline-first so what's due reads at a glance.
     private var buckets: [(String, [BoardTask])] {
         let visible = store.boardTasks.filter { showDone || !$0.isDone }
         let grouped = Dictionary(grouping: visible) { $0.bucket ?? "Other" }
-        return grouped.sorted { $0.key < $1.key }
+        let sortedTasks = grouped.mapValues { ts in
+            ts.sorted { ($0.deadline ?? "9999", $0.id) < ($1.deadline ?? "9999", $1.id) }
+        }
+        return sortedTasks.sorted {
+            let a = $0.value.first?.deadline ?? "9999"
+            let b = $1.value.first?.deadline ?? "9999"
+            return a == b ? $0.key < $1.key : a < b
+        }
     }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
+                captureBar
+
                 Toggle(isOn: $showDone.animation(.spring(duration: 0.3))) {
                     Text("Show completed")
                         .font(.subheadline.weight(.medium))
@@ -22,19 +36,52 @@ struct BoardView: View {
                 .glassCard(padding: 14)
 
                 ForEach(buckets, id: \.0) { pair in
-                    BucketSection(name: pair.0, tasks: pair.1)
+                    BucketSection(name: pair.0, tasks: pair.1) { editing = $0 }
                 }
                 Color.clear.frame(height: 90)
             }
             .padding(.horizontal, 20)
         }
         .refreshable { await store.refresh() }
+        .sheet(item: $editing) { TaskEditSheet(item: $0) }
+    }
+
+    private var captureBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "square.and.pencil")
+                .foregroundStyle(Theme.accent)
+            TextField("Note it… \"call Mr. Bond by friday\"", text: $note, axis: .vertical)
+                .foregroundStyle(.white)
+                .submitLabel(.done)
+                .onSubmit(capture)
+            if capturing {
+                ProgressView().tint(Theme.accent)
+            } else if !note.trimmingCharacters(in: .whitespaces).isEmpty {
+                Button(action: capture) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundStyle(Theme.accent)
+                }
+            }
+        }
+        .glassCard(padding: 14)
+    }
+
+    private func capture() {
+        let text = note.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty, !capturing else { return }
+        capturing = true
+        Task {
+            if await store.capture(text) { note = "" }
+            capturing = false
+        }
     }
 }
 
 struct BucketSection: View {
     let name: String
     let tasks: [BoardTask]
+    var onEdit: (BoardTask) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -50,7 +97,7 @@ struct BucketSection: View {
             }
             VStack(spacing: 8) {
                 ForEach(tasks) { t in
-                    TaskRow(item: t)
+                    TaskRow(item: t, onEdit: onEdit)
                 }
             }
         }
@@ -60,6 +107,7 @@ struct BucketSection: View {
 struct TaskRow: View {
     @EnvironmentObject var store: PMStore
     let item: BoardTask
+    var onEdit: (BoardTask) -> Void = { _ in }
 
     private var statusColor: Color {
         switch item.status {
@@ -101,7 +149,12 @@ struct TaskRow: View {
                 }
             }
             Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
         .glassCard(padding: 12)
+        .contentShape(Rectangle())
+        .onTapGesture { onEdit(item) }
     }
 }

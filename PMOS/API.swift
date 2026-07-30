@@ -68,6 +68,18 @@ final class PMStore: ObservableObject {
         await post("/task/update", body: ["id": t.id, "status": t.isDone ? "active" : "done"])
     }
 
+    func capture(_ text: String, bucket: String? = nil) async -> Bool {
+        var body: [String: Any] = ["text": text]
+        if let bucket, !bucket.isEmpty { body["bucket"] = bucket }
+        return await post("/capture", body: body)
+    }
+
+    func editTask(id: String, title: String, notes: String, deadline: String?, status: String) async -> Bool {
+        var body: [String: Any] = ["id": id, "title": title, "notes": notes, "status": status]
+        if let deadline { body["deadline"] = deadline }
+        return await post("/task/update", body: body)
+    }
+
     // MARK: - transport
 
     private func request(_ path: String) throws -> URLRequest {
