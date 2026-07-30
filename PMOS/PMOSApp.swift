@@ -16,6 +16,7 @@ struct PMOSApp: App {
 
 struct RootView: View {
     @EnvironmentObject var store: PMStore
+    @Environment(\.scenePhase) private var scenePhase
     @State private var tab: Tab = .today
     @State private var showNeedBy = false
     @State private var showSettings = false
@@ -48,6 +49,9 @@ struct RootView: View {
         .sheet(isPresented: $showNeedBy) { NeedBySheet() }
         .sheet(isPresented: $showSettings) { SettingsSheet() }
         .task { await store.refresh() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await store.refresh() } }
+        }
     }
 
     private var header: some View {

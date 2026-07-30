@@ -46,6 +46,19 @@ struct BoardTask: Codable, Identifiable, Hashable {
     var done_date: String?
 
     var isDone: Bool { status == "done" }
+
+    // Malformed board writes have shipped tasks with a null title/status;
+    // one such record must not blank the whole decode.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = (try? c.decode(String.self, forKey: .title)) ?? "(untitled)"
+        bucket = try? c.decode(String.self, forKey: .bucket)
+        status = (try? c.decode(String.self, forKey: .status)) ?? "active"
+        notes = try? c.decode(String.self, forKey: .notes)
+        deadline = try? c.decode(String.self, forKey: .deadline)
+        done_date = try? c.decode(String.self, forKey: .done_date)
+    }
 }
 
 struct ProjectMeta: Codable, Hashable {

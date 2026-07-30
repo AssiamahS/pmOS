@@ -22,20 +22,26 @@ final class PMStore: ObservableObject {
     func refresh() async {
         isLoading = true
         defer { isLoading = false }
-        do {
-            async let status: StatusResponse = get("/status")
-            async let late: OverdueResponse = get("/overdue")
-            async let board: TaskboardResponse = get("/taskboard")
-            let (s, l, b) = try await (status, late, board)
-            projects = s.projects.sorted { $0.key < $1.key }
-            taskMap = s.taskMap
-            overdue = l.overdue
-            dueSoon = l.soon
-            boardTasks = b.tasks
-            lastError = nil
-            lastSync = Date()
-        } catch {
-            lastError = friendly(error)
+        // First attempt can time out while the Tailscale tunnel wakes from
+        // idle — retry instead of surfacing a one-shot failure.
+        for attempt in 1...3 {
+            do {
+                async let status: StatusResponse = get("/status")
+                async let late: OverdueResponse = get("/overdue")
+                async let board: TaskboardResponse = get("/taskboard")
+                let (s, l, b) = try await (status, late, board)
+                projects = s.projects.sorted { $0.key < $1.key }
+                taskMap = s.taskMap
+                overdue = l.overdue
+                dueSoon = l.soon
+                boardTasks = b.tasks
+                lastError = nil
+                lastSync = Date()
+                return
+            } catch {
+                if attempt == 3 { lastError = friendly(error) }
+                else { try? await Task.sleep(for: .seconds(2)) }
+            }
         }
     }
 
@@ -71,8 +77,17 @@ final class PMStore: ObservableObject {
         return req
     }
 
+    // waitsForConnectivity keeps the request queued while the VPN interface
+    // comes up instead of failing instantly with "network unreachable".
+    private static let session: URLSession = {
+        let cfg = URLSessionConfiguration.default
+        cfg.waitsForConnectivity = true
+        cfg.timeoutIntervalForResource = 20
+        return URLSession(configuration: cfg)
+    }()
+
     private func get<T: Decodable>(_ path: String) async throws -> T {
-        let (data, _) = try await URLSession.shared.data(for: request(path))
+        let (data, _) = try await Self.session.data(for: request(path))
         return try JSONDecoder().decode(T.self, from: data)
     }
 
@@ -81,7 +96,7 @@ final class PMStore: ObservableObject {
             var req = try request(path)
             req.httpMethod = "POST"
             req.httpBody = try JSONSerialization.data(withJSONObject: body)
-            let (_, resp) = try await URLSession.shared.data(for: req)
+            let (_, resp) = try await Self.session.data(for: req)
             guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
                 lastError = "Server rejected the change."
                 return false
