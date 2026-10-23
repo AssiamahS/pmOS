@@ -1,5 +1,7 @@
 # pmOS
 
+**Install:** open [assiamahs.github.io/pmOS/install.html](https://assiamahs.github.io/pmOS/install.html) in Safari on your iPhone.
+
 Project manager on the iPhone, talking straight to the Claude Code taskboard on the Mac.
 
 Companion app to [pm](https://github.com/AssiamahS/pm) — the Mac runs `pm-api`
